@@ -1,0 +1,11 @@
+{
+  "name": "TSL2585",
+  "version": "0.1.0",
+  "description": "Arduino driver library for ams OSRAM TSL2585 tri-channel optical sensor (Photopic, UV, IR)",
+  "keywords": ["tsl2585", "uv", "photopic", "infrared", "optical", "irradiance", "i2c", "als"],
+  "authors": [{ "name": "Josh RH" }],
+  "license": "MIT",
+  "frameworks": ["arduino"],
+  "platforms": ["*"],
+  "dependencies": { "Wire": "*" }
+}
