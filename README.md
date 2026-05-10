@@ -16,22 +16,6 @@ Each channel has an independent programmable gain (0.5× to 4096×, 14 steps) an
 
 Irradiance is returned in **mW/cm²** using factory responsivity constants from the TSL2585 datasheet (Figure 6). A factory OTP calibration byte (`UV_CALIB`) is applied to the UV channel at `begin()` to compensate for device-to-device variation.
 
-## Installation
-
-### PlatformIO (recommended)
-
-Clone or add as a submodule into your project's `lib/` directory:
-
-```bash
-git submodule add git@github.com:welcometotheroot/tsl2585.git lib/tsl2585
-```
-
-PlatformIO resolves `src/` automatically via `library.json` — no `lib_deps` entry needed for local libraries.
-
-### Arduino IDE
-
-Copy the `lib/tsl2585/` folder into your Arduino `libraries/` directory and restart the IDE.
-
 ## Usage
 
 ### Interrupt-driven (recommended)
