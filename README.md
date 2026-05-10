@@ -1,6 +1,6 @@
 # TSL2585 Arduino Driver
 
-A standalone Arduino driver for the ams OSRAM TSL2585 tri-channel optical sensor, providing calibrated irradiance measurements across Photopic, UV, and IR channels with per-channel auto-gain, factory UV calibration, flash metering support, and FIFO-based flicker detection.
+A standalone Arduino driver for the ams OSRAM TSL2585 tri-channel optical sensor, providing calibrated irradiance measurements across Photopic, UV, and IR channels with per-channel gain control, factory UV calibration, and FIFO-based flicker detection.
 
 ## Device Overview
 
@@ -12,7 +12,7 @@ The TSL2585 measures light across three independent channels simultaneously:
 | UV       | Mod1      | UV-A (~365nm)         | ALS_DATA1    |
 | IR       | Mod2      | Near-infrared (~940nm)| ALS_DATA2    |
 
-Each channel has an independent programmable gain (0.5× to 4096×, 14 steps) and per-channel software auto-gain that keeps all three ADC outputs in the 10–90% full-scale window independently. This is important for spectrally selective sources: a 365nm UV lamp drives UV gain low while IR and Photopic climb to maximum sensitivity without interference.
+Each channel has an independent programmable gain (0.5× to 4096×, 14 steps).
 
 Irradiance is returned in **mW/cm²** using factory responsivity constants from the TSL2585 datasheet (Figure 6). A factory OTP calibration byte (`UV_CALIB`) is applied to the UV channel at `begin()` to compensate for device-to-device variation.
 
@@ -59,21 +59,6 @@ void loop() {
 }
 ```
 
-### Flash metering
-
-Disable auto-gain and switch to fast integration before triggering a flash. Restore afterwards:
-
-```cpp
-TSL2585::setAutoGainEnabled(false);
-TSL2585::setFastIntegration();      // ~8ms integration
-
-// ... trigger flash, wait for isDataReady() ...
-
-TSL2585Data d;
-TSL2585::read(d);
-TSL2585::resumeNormalIntegration(); // restores 28ms, re-enables auto-gain
-```
-
 ### Flicker detection
 
 Raw Photopic samples stream into the on-chip FIFO. Read them into a buffer and perform FFT externally to determine flicker frequency:
@@ -118,7 +103,6 @@ TSL2585::readFifoSamples(buf, sizeof(buf), n);
 
 | Function | Description |
 |----------|-------------|
-| `setAutoGainEnabled(bool)` | Enable/disable per-channel software auto-gain (default: enabled). |
 | `setPhotopicGain(code)` | Set Photopic gain code (0x00–0x0D). |
 | `setUVGain(code)` | Set UV gain code. |
 | `setIRGain(code)` | Set IR gain code. |
@@ -145,8 +129,6 @@ Gain codes:
 |----------|-------------|
 | `setIntegrationSamples(n)` | Set ALS_NR_SAMPLES (0–2047). Integration time = (n+1) × 250µs. |
 | `getIntegrationTimeMs()` | Return current integration time in milliseconds. |
-| `setFastIntegration()` | Switch to ~8ms integration and disable auto-gain (for flash metering). |
-| `resumeNormalIntegration()` | Restore saved integration time and re-enable auto-gain. |
 
 ### ALS threshold interrupt
 
@@ -191,7 +173,7 @@ struct TSL2585Data {
 };
 ```
 
-Gain values report the hardware gain **actually used** for the cycle (read from `ALS_STATUS2/3`), not the commanded code. When a channel is saturated its irradiance value is a lower bound — auto-gain will decrease sensitivity on the next cycle.
+Gain values report the hardware gain **actually used** for the cycle (read from `ALS_STATUS2/3`), not the commanded code. When a channel is saturated its irradiance value is a lower bound.
 
 ## Hardware notes
 

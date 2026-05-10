@@ -8,7 +8,6 @@
 static TwoWire*      s_wire             = nullptr;
 static uint8_t       s_intPin           = 0xFF;
 static volatile bool s_dataReady        = false;
-static bool          s_autoGainEnabled  = true;
 
 // Per-channel commanded gain codes (0x00–0x0D). Hardware packs all three into
 // two registers; any setter writes all three simultaneously.
@@ -41,13 +40,6 @@ static constexpr uint8_t I2C_ADDRESS = 0x39;
 static constexpr float RESPONSIVITY_PHOTOPIC_128X_10MS = 73.7f;
 static constexpr float RESPONSIVITY_IR_128X_10MS       = 74.8f;
 static constexpr float RESPONSIVITY_UV_128X_10MS       = 11.16f;
-
-// ---------------------------------------------------------------------------
-// Auto-gain thresholds
-// ---------------------------------------------------------------------------
-
-static constexpr uint16_t AUTO_GAIN_HIGH = 58982;  // 90% of 65535
-static constexpr uint16_t AUTO_GAIN_LOW  = 6554;   // 10% of 65535
 
 // ---------------------------------------------------------------------------
 // ISR
@@ -97,22 +89,6 @@ static bool writeGainRegisters(uint8_t photopicCode, uint8_t uvCode, uint8_t irC
   uint8_t gainL = static_cast<uint8_t>((uvCode << 4) | (photopicCode & 0x0F));
   return writeReg(REG_STEP0_GAIN_L, gainL) &&
          writeReg(REG_STEP0_GAIN_H, irCode & 0x0F);
-}
-
-// ---------------------------------------------------------------------------
-// Auto-gain helper
-// ---------------------------------------------------------------------------
-
-// Adjust a single channel's gain code in-place. Does NOT write to hardware —
-// caller batches all three and writes once via writeGainRegisters().
-static void adjustChannelGain(uint16_t rawCount, bool saturated, uint8_t& gainCode) {
-  if (saturated && gainCode > 0) {
-    gainCode--;
-  } else if (!saturated && rawCount > AUTO_GAIN_HIGH && gainCode > 0) {
-    gainCode--;
-  } else if (!saturated && rawCount < AUTO_GAIN_LOW && gainCode < MAX_GAIN_CODE) {
-    gainCode++;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -349,15 +325,6 @@ bool read(TSL2585Data& data) {
   // Clear the ALS interrupt — this restarts the next measurement cycle.
   writeReg(REG_STATUS, STATUS_AINT);
 
-  // Per-channel software auto-gain: adjust each channel independently, then
-  // write all three codes in one two-register burst.
-  if (s_autoGainEnabled) {
-    adjustChannelGain(rawPhotopic, satPhotopic, s_photopicGainCode);
-    adjustChannelGain(rawUV,       satUV,       s_uvGainCode);
-    adjustChannelGain(rawIR,       satIR,       s_irGainCode);
-    writeGainRegisters(s_photopicGainCode, s_uvGainCode, s_irGainCode);
-  }
-
   // Apply factory UV calibration to UV counts only.
   // Formula: UV_cal = UV_raw / (1 - (UV_CALIB - 127) / 100)
   float calibFactor = 1.0f - (static_cast<float>(s_uvCalibByte) - 127.0f) / 100.0f;
@@ -399,16 +366,6 @@ bool read(TSL2585Data& data) {
 
 bool checkSaturation() {
   return s_photopicSaturated || s_uvSaturated || s_irSaturated;
-}
-
-// ---------------------------------------------------------------------------
-// Auto-gain
-// ---------------------------------------------------------------------------
-
-void setAutoGainEnabled(bool enabled) {
-  s_autoGainEnabled = enabled;
-  S.print("TSL2585: Auto-gain ");
-  S.println(enabled ? "enabled" : "disabled");
 }
 
 // ---------------------------------------------------------------------------
@@ -473,36 +430,6 @@ uint32_t getIntegrationTimeMs() {
   // integration_ms = (ALS_NR_SAMPLES + 1) × (SAMPLE_TIME + 1) × 1.388889µs
   // With default SAMPLE_TIME = 179: step = (179+1) × 1.388889µs = 250µs = 0.25ms
   return static_cast<uint32_t>((static_cast<uint32_t>(s_numberOfSamples) + 1) * 250) / 1000;
-}
-
-// ---------------------------------------------------------------------------
-// Flash metering support
-// ---------------------------------------------------------------------------
-
-bool setFastIntegration() {
-  s_autoGainEnabled = false;
-  // ALS_NR_SAMPLES = 31 → 32 × 250µs ≈ 8ms
-  if (!writeReg(REG_ALS_NR_SAMPLES0, 0x1F) ||
-      !writeReg(REG_ALS_NR_SAMPLES1, 0x00)) {
-    S.println("TSL2585: Failed to set fast integration");
-    return false;
-  }
-  S.println("TSL2585: Fast integration mode (~8ms), auto-gain disabled");
-  return true;
-}
-
-bool resumeNormalIntegration() {
-  uint8_t lo = static_cast<uint8_t>(s_numberOfSamples & 0xFF);
-  uint8_t hi = static_cast<uint8_t>((s_numberOfSamples >> 8) & 0x07);
-  if (!writeReg(REG_ALS_NR_SAMPLES0, lo) ||
-      !writeReg(REG_ALS_NR_SAMPLES1, hi)) {
-    S.println("TSL2585: Failed to restore integration time");
-    return false;
-  }
-  s_autoGainEnabled = true;
-  S.printf("TSL2585: Normal integration restored (%lums), auto-gain enabled\n",
-           getIntegrationTimeMs());
-  return true;
 }
 
 // ---------------------------------------------------------------------------

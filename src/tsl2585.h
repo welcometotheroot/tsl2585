@@ -12,11 +12,7 @@
  *   - IR        (Mod2) — near-infrared, peaks ~940nm
  *
  * Each channel has an independent programmable gain (0.5× to 4096×, 14 steps)
- * and shares a common integration time.  Per-channel software auto-gain is
- * enabled by default and adjusts each channel independently after every read
- * cycle — keeping all three ADC outputs in the 10–90% full-scale window even
- * when the light source is strongly wavelength-selective (e.g. a 365nm UV lamp
- * will drive UV gain low while IR and Photopic climb to maximum sensitivity).
+ * and shares a common integration time.
  *
  * Irradiance is returned in mW/cm² using factory responsivity constants from
  * Figure 6 of the TSL2585 datasheet.  A factory OTP calibration byte
@@ -40,16 +36,6 @@
  * ## Typical usage (polling)
  * @code
  *   TSL2585::begin(Wire);   // no interrupt pin — caller polls isDataReady()
- * @endcode
- *
- * ## Flash metering
- * @code
- *   TSL2585::setAutoGainEnabled(false);
- *   TSL2585::setFastIntegration();        // ~8ms integration, auto-gain off
- *   // ... trigger flash, wait for ISR ...
- *   TSL2585Data d;
- *   TSL2585::read(d);
- *   TSL2585::resumeNormalIntegration();   // restores 28ms, re-enables auto-gain
  * @endcode
  *
  * ## Flicker detection
@@ -84,8 +70,7 @@
  *
  * Saturation flags are set when the photodiode output clipped before reaching
  * the ADC.  When a channel is saturated its irradiance value is a lower bound,
- * not an accurate measurement.  The driver decreases that channel's gain
- * automatically on the next cycle when auto-gain is enabled.
+ * not an accurate measurement.
  */
 struct TSL2585Data {
   float photopicIrradiance;  // mW/cm² — human-eye response
@@ -160,8 +145,8 @@ void clearDataReady();
  *
  * Reads ALS_STATUS (latches data registers), verifies data is valid, reads all
  * three 16-bit channels, reads actual gain used from ALS_STATUS2/3, clears the
- * ALS interrupt (restarting the next cycle), runs per-channel auto-gain, applies
- * factory UV calibration, converts counts to mW/cm², and populates `data`.
+ * ALS interrupt (restarting the next cycle), applies factory UV calibration,
+ * converts counts to mW/cm², and populates `data`.
  *
  * Returns false if the I2C communication fails or if ALS_DATA_VALID is not set
  * (i.e. a cycle has not completed since the last read).
@@ -177,23 +162,6 @@ bool read(TSL2585Data& data);
  * Use per-channel `TSL2585Data::*Saturated` fields for channel-level detail.
  */
 bool checkSaturation();
-
-// ---------------------------------------------------------------------------
-// Auto-gain
-// ---------------------------------------------------------------------------
-
-/**
- * Enable or disable per-channel software auto-gain.
- *
- * Auto-gain is enabled by default.  Disable before flash metering to prevent
- * gain changes mid-measurement:
- * @code
- *   TSL2585::setAutoGainEnabled(false);
- *   // ... trigger flash ...
- *   TSL2585::setAutoGainEnabled(true);
- * @endcode
- */
-void setAutoGainEnabled(bool enabled);
 
 // ---------------------------------------------------------------------------
 // Per-channel gain control
@@ -250,25 +218,6 @@ bool setIntegrationSamples(uint16_t numberOfSamples);
  * stored ALS_NR_SAMPLES value and the fixed 250µs sample step.
  */
 uint32_t getIntegrationTimeMs();
-
-// ---------------------------------------------------------------------------
-// Flash metering support
-// ---------------------------------------------------------------------------
-
-/**
- * Switch to fast integration (~8ms) and disable auto-gain.
- *
- * Use before triggering a flash measurement.  Call resumeNormalIntegration()
- * after reading the result to restore the previous settings.
- */
-bool setFastIntegration();
-
-/**
- * Restore the saved ALS_NR_SAMPLES value and re-enable auto-gain.
- *
- * Call after reading a flash measurement result.
- */
-bool resumeNormalIntegration();
 
 // ---------------------------------------------------------------------------
 // ALS threshold interrupt
