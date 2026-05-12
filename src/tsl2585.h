@@ -84,6 +84,13 @@ struct TSL2585Data {
   bool photopicSaturated;
   bool uvSaturated;
   bool irSaturated;
+
+  // Raw 16-bit ADC counts as latched on this cycle.  Used by handler-level
+  // auto-gain to assess headroom (counts / 65535).  UV is the pre-UV_CALIB
+  // value; the calibration correction is folded into uvIrradiance only.
+  uint16_t photopicCounts;
+  uint16_t uvCounts;
+  uint16_t irCounts;
 };
 
 /**

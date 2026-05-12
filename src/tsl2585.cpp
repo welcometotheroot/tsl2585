@@ -350,6 +350,9 @@ bool read(TSL2585Data& data) {
   data.photopicSaturated = satPhotopic;
   data.uvSaturated       = satUV;
   data.irSaturated       = satIR;
+  data.photopicCounts    = rawPhotopic;
+  data.uvCounts          = rawUV;
+  data.irCounts          = rawIR;
 
   // Cache saturation state for checkSaturation().
   s_photopicSaturated = satPhotopic;
