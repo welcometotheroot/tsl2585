@@ -123,63 +123,35 @@ static bool initSensor() {
   uint32_t deadline = millis() + 5;
   uint8_t status4;
   do {
-    if (!readReg(REG_STATUS4, status4)) {
-      S.println("TSL2585: I2C error waiting for INIT_BUSY");
-      return false;
-    }
+    if (!readReg(REG_STATUS4, status4)) return false;
     if (!(status4 & STATUS4_INIT_BUSY)) break;
   } while (millis() < deadline);
 
-  if (status4 & STATUS4_INIT_BUSY) {
-    S.println("TSL2585: INIT_BUSY timeout");
-    return false;
-  }
+  if (status4 & STATUS4_INIT_BUSY) return false;
 
   // 2. Soft reset with oscillator on (required by datasheet).
-  if (!writeReg(REG_ENABLE, ENABLE_PON)) {
-    S.println("TSL2585: Failed to power on for reset");
-    return false;
-  }
+  if (!writeReg(REG_ENABLE, ENABLE_PON)) return false;
   delay(1);
-  if (!writeReg(REG_CONTROL, CONTROL_SOFT_RESET)) {
-    S.println("TSL2585: Soft reset failed");
-    return false;
-  }
+  if (!writeReg(REG_CONTROL, CONTROL_SOFT_RESET)) return false;
   delay(1);
 
   // 3. Verify device ID.
   uint8_t id;
-  if (!readReg(REG_ID, id)) {
-    S.println("TSL2585: Failed to read device ID");
-    return false;
-  }
-  if (id != DEVICE_ID) {
-    S.printf("TSL2585: Unexpected device ID 0x%02X (expected 0x%02X)\n", id, DEVICE_ID);
-    return false;
-  }
+  if (!readReg(REG_ID, id)) return false;
+  if (id != DEVICE_ID) return false;
 
   // 4. Read factory UV calibration OTP byte.
-  if (!readReg(REG_UV_CALIB, s_uvCalibByte)) {
-    S.println("TSL2585: Failed to read UV_CALIB");
-    return false;
-  }
+  if (!readReg(REG_UV_CALIB, s_uvCalibByte)) return false;
 
   // 5. Disable ALS_SCALE for direct 16-bit readout (clear bits [3:0] of MEAS_MODE0).
   uint8_t measMode0;
-  if (!readReg(REG_MEAS_MODE0, measMode0)) {
-    S.println("TSL2585: Failed to read MEAS_MODE0");
-    return false;
-  }
-  if (!writeReg(REG_MEAS_MODE0, measMode0 & 0xF0)) {
-    S.println("TSL2585: Failed to write MEAS_MODE0");
-    return false;
-  }
+  if (!readReg(REG_MEAS_MODE0, measMode0)) return false;
+  if (!writeReg(REG_MEAS_MODE0, measMode0 & 0xF0)) return false;
 
   // 6. Configure SMUX for isolated channels (step 0 only):
   //    Mod0 = Photopic (PD1+PD5), Mod1 = UV (PD3+PD4), Mod2 = IR (PD0+PD2).
   if (!writeReg(REG_STEP0_SMUX_L, SMUX_L_ISOLATED) ||
       !writeReg(REG_STEP0_SMUX_H, SMUX_H_ISOLATED)) {
-    S.println("TSL2585: Failed to configure SMUX");
     return false;
   }
 
@@ -187,14 +159,12 @@ static bool initSensor() {
   s_numberOfSamples = 111;
   if (!writeReg(REG_ALS_NR_SAMPLES0, 0x6F) ||
       !writeReg(REG_ALS_NR_SAMPLES1, 0x00)) {
-    S.println("TSL2585: Failed to set integration time");
     return false;
   }
 
   // 8. Set initial gain 128× (code 0x08) on all three channels.
   s_photopicGainCode = s_uvGainCode = s_irGainCode = 0x08;
   if (!writeGainRegisters(s_photopicGainCode, s_uvGainCode, s_irGainCode)) {
-    S.println("TSL2585: Failed to set gain");
     return false;
   }
 
@@ -216,30 +186,15 @@ bool begin(TwoWire& wire, uint8_t intPin) {
 
   // 9. Configure ALS interrupt (active-low, open-drain — FALLING edge).
   attachInterrupt(digitalPinToInterrupt(intPin), dataReadyISR, FALLING);
-  if (!writeReg(REG_INTENAB, INTENAB_AIEN)) {
-    S.println("TSL2585: Failed to enable ALS interrupt");
-    return false;
-  }
+  if (!writeReg(REG_INTENAB, INTENAB_AIEN)) return false;
   // APERS = 0 (interrupt every cycle), threshold channel = Mod0.
-  if (!writeReg(REG_CFG5, 0x00)) {
-    S.println("TSL2585: Failed to configure CFG5");
-    return false;
-  }
+  if (!writeReg(REG_CFG5, 0x00)) return false;
 
   // 10. Power on and enable ALS.
-  if (!writeReg(REG_ENABLE, ENABLE_PON)) {
-    S.println("TSL2585: Failed to power on");
-    return false;
-  }
+  if (!writeReg(REG_ENABLE, ENABLE_PON)) return false;
   delayMicroseconds(500);
-  if (!writeReg(REG_ENABLE, ENABLE_PON | ENABLE_AEN)) {
-    S.println("TSL2585: Failed to enable ALS");
-    return false;
-  }
+  if (!writeReg(REG_ENABLE, ENABLE_PON | ENABLE_AEN)) return false;
 
-  uint8_t id;
-  readReg(REG_ID, id);
-  S.printf("TSL2585 initialised (interrupt mode). ID=0x%02X UV_CALIB=%d\n", id, s_uvCalibByte);
   return true;
 }
 
@@ -251,19 +206,10 @@ bool begin(TwoWire& wire) {
   if (!initSensor()) return false;
 
   // No interrupt pin — AEN interrupt not enabled; caller polls isDataReady().
-  if (!writeReg(REG_ENABLE, ENABLE_PON)) {
-    S.println("TSL2585: Failed to power on");
-    return false;
-  }
+  if (!writeReg(REG_ENABLE, ENABLE_PON)) return false;
   delayMicroseconds(500);
-  if (!writeReg(REG_ENABLE, ENABLE_PON | ENABLE_AEN)) {
-    S.println("TSL2585: Failed to enable ALS");
-    return false;
-  }
+  if (!writeReg(REG_ENABLE, ENABLE_PON | ENABLE_AEN)) return false;
 
-  uint8_t id;
-  readReg(REG_ID, id);
-  S.printf("TSL2585 initialised (polling mode). ID=0x%02X UV_CALIB=%d\n", id, s_uvCalibByte);
   return true;
 }
 
@@ -375,32 +321,24 @@ bool checkSaturation() {
 bool setPhotopicGain(uint8_t gainCode) {
   if (gainCode > MAX_GAIN_CODE) return false;
   s_photopicGainCode = gainCode;
-  S.printf("TSL2585: Photopic gain set to code 0x%02X (%d×)\n",
-           gainCode, gainCodeToValue(gainCode));
   return writeGainRegisters(s_photopicGainCode, s_uvGainCode, s_irGainCode);
 }
 
 bool setUVGain(uint8_t gainCode) {
   if (gainCode > MAX_GAIN_CODE) return false;
   s_uvGainCode = gainCode;
-  S.printf("TSL2585: UV gain set to code 0x%02X (%d×)\n",
-           gainCode, gainCodeToValue(gainCode));
   return writeGainRegisters(s_photopicGainCode, s_uvGainCode, s_irGainCode);
 }
 
 bool setIRGain(uint8_t gainCode) {
   if (gainCode > MAX_GAIN_CODE) return false;
   s_irGainCode = gainCode;
-  S.printf("TSL2585: IR gain set to code 0x%02X (%d×)\n",
-           gainCode, gainCodeToValue(gainCode));
   return writeGainRegisters(s_photopicGainCode, s_uvGainCode, s_irGainCode);
 }
 
 bool setAllGains(uint8_t gainCode) {
   if (gainCode > MAX_GAIN_CODE) return false;
   s_photopicGainCode = s_uvGainCode = s_irGainCode = gainCode;
-  S.printf("TSL2585: All gains set to code 0x%02X (%d×)\n",
-           gainCode, gainCodeToValue(gainCode));
   return writeGainRegisters(gainCode, gainCode, gainCode);
 }
 
@@ -417,12 +355,9 @@ bool setIntegrationSamples(uint16_t numberOfSamples) {
   uint8_t hi = static_cast<uint8_t>((numberOfSamples >> 8) & 0x07);
   if (!writeReg(REG_ALS_NR_SAMPLES0, lo) ||
       !writeReg(REG_ALS_NR_SAMPLES1, hi)) {
-    S.println("TSL2585: Failed to set ALS_NR_SAMPLES");
     return false;
   }
   s_numberOfSamples = numberOfSamples;
-  S.printf("TSL2585: Integration time set to %lums (ALS_NR_SAMPLES=%u)\n",
-           getIntegrationTimeMs(), numberOfSamples);
   return true;
 }
 
@@ -443,7 +378,6 @@ bool setAlsThreshold(uint8_t channel, uint32_t low, uint32_t high) {
   if (!writeReg(REG_AILT0,     static_cast<uint8_t>(low & 0xFF)) ||
       !writeReg(REG_AILT0 + 1, static_cast<uint8_t>((low >> 8) & 0xFF)) ||
       !writeReg(REG_AILT0 + 2, static_cast<uint8_t>((low >> 16) & 0xFF))) {
-    S.println("TSL2585: Failed to write ALS low threshold");
     return false;
   }
 
@@ -451,7 +385,6 @@ bool setAlsThreshold(uint8_t channel, uint32_t low, uint32_t high) {
   if (!writeReg(REG_AIHT0,     static_cast<uint8_t>(high & 0xFF)) ||
       !writeReg(REG_AIHT0 + 1, static_cast<uint8_t>((high >> 8) & 0xFF)) ||
       !writeReg(REG_AIHT0 + 2, static_cast<uint8_t>((high >> 16) & 0xFF))) {
-    S.println("TSL2585: Failed to write ALS high threshold");
     return false;
   }
 
@@ -459,12 +392,8 @@ bool setAlsThreshold(uint8_t channel, uint32_t low, uint32_t high) {
   uint8_t cfg5;
   if (!readReg(REG_CFG5, cfg5)) return false;
   cfg5 = (cfg5 & 0x8F) | static_cast<uint8_t>((channel & 0x07) << 4);
-  if (!writeReg(REG_CFG5, cfg5)) {
-    S.println("TSL2585: Failed to set threshold channel in CFG5");
-    return false;
-  }
+  if (!writeReg(REG_CFG5, cfg5)) return false;
 
-  S.printf("TSL2585: ALS threshold ch%d low=%lu high=%lu\n", channel, low, high);
   return true;
 }
 
@@ -472,11 +401,7 @@ bool setAlsPersistence(uint8_t persistence) {
   uint8_t cfg5;
   if (!readReg(REG_CFG5, cfg5)) return false;
   cfg5 = (cfg5 & 0xF0) | (persistence & 0x0F);
-  if (!writeReg(REG_CFG5, cfg5)) {
-    S.println("TSL2585: Failed to set APERS");
-    return false;
-  }
-  S.printf("TSL2585: APERS set to %d\n", persistence);
+  if (!writeReg(REG_CFG5, cfg5)) return false;
   return true;
 }
 
@@ -504,8 +429,6 @@ bool beginFlickerDetection(uint16_t sampleCount, bool infiniteRepeat) {
   if (!readReg(REG_ENABLE, enable)) return false;
   if (!writeReg(REG_ENABLE, enable | ENABLE_FDEN)) return false;
 
-  S.printf("TSL2585: Flicker detection started (%d samples, %s)\n",
-           sampleCount, infiniteRepeat ? "infinite" : "one-shot");
   return true;
 }
 
@@ -513,7 +436,6 @@ void stopFlickerDetection() {
   uint8_t enable;
   readReg(REG_ENABLE, enable);
   writeReg(REG_ENABLE, enable & static_cast<uint8_t>(~ENABLE_FDEN));
-  S.println("TSL2585: Flicker detection stopped");
 }
 
 bool isFifoReady() {
@@ -534,7 +456,6 @@ bool readFifoSamples(uint8_t* buffer, uint16_t maxBytes, uint16_t& bytesRead) {
   uint8_t fifoStatus1;
   readReg(REG_FIFO_STATUS1, fifoStatus1);
   if (fifoStatus1 & (FIFO_STATUS1_OVERFLOW | FIFO_STATUS1_UNDERFLOW)) {
-    S.println("TSL2585: FIFO error — samples may be corrupt");
     return false;
   }
   return true;
