@@ -293,14 +293,11 @@ void clearDataReady() {
 // ---------------------------------------------------------------------------
 
 bool read(TSL2585Data& data) {
-  // Read ALS_STATUS first — this latches all three 16-bit data registers.
+  // ALS_DATA_VALID is clear-on-read of STATUS2, so isDataReady() (which polls
+  // STATUS2) is the sole gate — don't re-check it here.  Read ALS_STATUS to
+  // latch the data registers and capture saturation flags.
   uint8_t alsStatus;
   if (!readReg(REG_ALS_STATUS, alsStatus)) return false;
-
-  // Confirm a complete integration cycle has occurred.
-  uint8_t status2;
-  if (!readReg(REG_STATUS2, status2)) return false;
-  if (!(status2 & STATUS2_ALS_DATA_VALID)) return false;
 
   // Read three 16-bit channels: DATA0 = Photopic, DATA1 = UV, DATA2 = IR.
   uint16_t rawPhotopic, rawUV, rawIR;
