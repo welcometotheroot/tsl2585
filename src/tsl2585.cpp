@@ -290,6 +290,9 @@ bool read(TSL2585Data& data) {
   data.photopicGain      = gainCodeToValue(photopicGainCode);
   data.uvGain            = gainCodeToValue(uvGainCode);
   data.irGain            = gainCodeToValue(irGainCode);
+  data.photopicGainCode  = photopicGainCode;
+  data.uvGainCode        = uvGainCode;
+  data.irGainCode        = irGainCode;
   data.photopicSaturated = satPhotopic;
   data.uvSaturated       = satUV;
   data.irSaturated       = satIR;

@@ -81,6 +81,14 @@ struct TSL2585Data {
   int uvGain;
   int irGain;
 
+  // Effective gain codes (0x00..0x0D) latched from ALS_STATUS2/3 for this
+  // cycle.  Use these — not the commanded codes from getXGainCode() — when
+  // making AGC decisions, because a gain write made at the end of one cycle
+  // does not take effect until the cycle after next.
+  uint8_t photopicGainCode;
+  uint8_t uvGainCode;
+  uint8_t irGainCode;
+
   bool photopicSaturated;
   bool uvSaturated;
   bool irSaturated;
