@@ -184,11 +184,14 @@ bool begin(TwoWire& wire, uint8_t intPin) {
 
   if (!initSensor()) return false;
 
-  // 9. Configure ALS interrupt (active-low, open-drain — FALLING edge).
+  // 9. Configure measurement-complete interrupt (active-low open-drain, FALLING).
+  // MIEN fires unconditionally after every ALS cycle — no threshold setup needed.
+  // Pull the pin high: TSL2585 INT is open-drain and requires an external or
+  // internal pull-up.  If the PCB omits the pull-up, the STM32 internal one
+  // keeps the line high when the sensor is not asserting.
+  pinMode(intPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(intPin), dataReadyISR, FALLING);
-  if (!writeReg(REG_INTENAB, INTENAB_AIEN)) return false;
-  // APERS = 0 (interrupt every cycle), threshold channel = Mod0.
-  if (!writeReg(REG_CFG5, 0x00)) return false;
+  if (!writeReg(REG_INTENAB, INTENAB_MIEN)) return false;
 
   // 10. Power on and enable ALS.
   if (!writeReg(REG_ENABLE, ENABLE_PON)) return false;
@@ -218,12 +221,24 @@ bool begin(TwoWire& wire) {
 // ---------------------------------------------------------------------------
 
 bool isDataReady() {
-  if (s_pollingMode) {
-    uint8_t status2;
-    if (!readReg(REG_STATUS2, status2)) return false;
-    return (status2 & STATUS2_ALS_DATA_VALID) != 0;
+  // Fast path: ISR already fired (IRQ mode, working INT pin).
+  if (s_dataReady) return true;
+
+  // Polling fallback: covers polling mode and IRQ mode with a broken/floating
+  // INT pin.  Rate-limited to ~1kHz so we don't saturate the I2C bus during
+  // the ~28ms integration window between successful reads.
+  static uint32_t lastPollMs = 0;
+  uint32_t now = millis();
+  if (now - lastPollMs < 1) return false;
+  lastPollMs = now;
+
+  uint8_t status2;
+  if (!readReg(REG_STATUS2, status2)) return false;
+  if (status2 & STATUS2_ALS_DATA_VALID) {
+    s_dataReady = true;
+    return true;
   }
-  return s_dataReady;
+  return false;
 }
 
 void setDataReady() {
@@ -265,8 +280,9 @@ bool read(TSL2585Data& data) {
   uint8_t uvGainCode       = (gainStatus2 >> 4) & 0x0F;
   uint8_t irGainCode       = gainStatus3 & 0x0F;
 
-  // Clear the ALS interrupt — this restarts the next measurement cycle.
-  writeReg(REG_STATUS, STATUS_AINT);
+  // Clear the measurement-complete interrupt to deassert INT.
+  // Must use STATUS_MINT (bit 7), matching the MIEN enable in begin().
+  writeReg(REG_STATUS, STATUS_MINT);
 
   // Apply factory UV calibration to UV counts only.
   // Formula: UV_cal = UV_raw / (1 - (UV_CALIB - 127) / 100)
